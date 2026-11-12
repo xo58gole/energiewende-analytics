@@ -1,0 +1,10 @@
+source_key,source_name,source_group,is_renewable,is_low_carbon,sort_order
+coal,Coal,Fossil,false,false,1
+gas,Gas,Fossil,false,false,2
+oil,Oil & other fossil,Fossil,false,false,3
+nuclear,Nuclear,Nuclear,false,true,4
+wind,Wind,Renewable,true,true,5
+solar,Solar,Renewable,true,true,6
+hydro,Hydro,Renewable,true,true,7
+bioenergy,Bioenergy,Renewable,true,true,8
+other_renewable,Other renewables,Renewable,true,true,9

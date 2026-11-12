@@ -1,0 +1,8 @@
+energiewende:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      # Path is relative to the dbt/ folder, so run dbt from inside it.
+      path: ../data/energiewende.duckdb
+      threads: 4

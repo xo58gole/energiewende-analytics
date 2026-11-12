@@ -1,0 +1,78 @@
+version: 2
+
+models:
+  - name: dim_country
+    description: Countries in scope, plus the EU-27 total as a benchmark.
+    columns:
+      - name: country_key
+        description: ISO-3 code (EU27 for the EU total)
+        data_tests: [unique, not_null]
+      - name: region
+        data_tests: [not_null]
+
+  - name: dim_energy_source
+    description: Energy sources and how they group (fossil / nuclear / renewable).
+    columns:
+      - name: source_key
+        data_tests: [unique, not_null]
+      - name: source_group
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['Fossil', 'Nuclear', 'Renewable']
+
+  - name: dim_year
+    description: Years with Germany's energy-policy phases and milestones.
+    columns:
+      - name: year
+        data_tests: [unique, not_null]
+
+  - name: fact_generation
+    description: Electricity generation by country, year and source (TWh).
+    data_tests:
+      - dbt_utils_free_unique_combination:
+          arguments:
+            columns: [country_key, year, source_key]
+    columns:
+      - name: country_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_country')
+                field: country_key
+      - name: year
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_year')
+                field: year
+      - name: source_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_energy_source')
+                field: source_key
+      - name: generation_twh
+        data_tests:
+          - not_null
+          - value_between:
+              arguments:
+                min_value: 0
+                max_value: 5000
+
+  - name: fact_country_year
+    description: One row per country and year with totals and headline KPIs.
+    data_tests:
+      - dbt_utils_free_unique_combination:
+          arguments:
+            columns: [country_key, year]
+    columns:
+      - name: renewable_share_pct
+        data_tests:
+          - value_between:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: total_generation_twh
+        data_tests: [not_null]

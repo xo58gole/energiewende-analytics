@@ -1,0 +1,12 @@
+country_key,country_name,region,is_benchmark,is_focus_country
+DEU,Germany,Central Europe,false,true
+FRA,France,Western Europe,false,false
+NLD,Netherlands,Western Europe,false,false
+BEL,Belgium,Western Europe,false,false
+AUT,Austria,Central Europe,false,false
+POL,Poland,Central Europe,false,false
+DNK,Denmark,Nordics,false,false
+SWE,Sweden,Nordics,false,false
+ESP,Spain,Southern Europe,false,false
+ITA,Italy,Southern Europe,false,false
+EU27,European Union (27),EU benchmark,true,false

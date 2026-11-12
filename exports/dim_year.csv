@@ -1,0 +1,27 @@
+year,decade,policy_phase,milestone,is_latest_year
+2000,2000,2000-2010 Early expansion,EEG renewable energy law passed,false
+2002,2000,2000-2010 Early expansion,,false
+2005,2000,2000-2010 Early expansion,,false
+2009,2000,2000-2010 Early expansion,,false
+2010,2010,2000-2010 Early expansion,,false
+2011,2010,2011-2019 Nuclear exit begins,Fukushima: 8 reactors shut down,false
+2014,2010,2011-2019 Nuclear exit begins,,false
+2015,2010,2011-2019 Nuclear exit begins,,false
+2016,2010,2011-2019 Nuclear exit begins,,false
+2017,2010,2011-2019 Nuclear exit begins,,false
+2018,2010,2011-2019 Nuclear exit begins,,false
+2022,2020,2020+ Coal exit & energy crisis,Energy crisis after gas supply cut,false
+2001,2000,2000-2010 Early expansion,,false
+2003,2000,2000-2010 Early expansion,,false
+2004,2000,2000-2010 Early expansion,,false
+2006,2000,2000-2010 Early expansion,,false
+2007,2000,2000-2010 Early expansion,,false
+2008,2000,2000-2010 Early expansion,,false
+2012,2010,2011-2019 Nuclear exit begins,,false
+2013,2010,2011-2019 Nuclear exit begins,,false
+2019,2010,2011-2019 Nuclear exit begins,,false
+2020,2020,2020+ Coal exit & energy crisis,Coal phase-out law passed,false
+2021,2020,2020+ Coal exit & energy crisis,,false
+2023,2020,2020+ Coal exit & energy crisis,Last nuclear plants close,false
+2024,2020,2020+ Coal exit & energy crisis,,false
+2025,2020,2020+ Coal exit & energy crisis,,true

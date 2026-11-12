@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Raw downloads, loaded untouched by ingest/load_raw.py
+    tables:
+      - name: owid_energy
+        description: >
+          Our World in Data energy dataset (country x year, 130 columns).
+          Electricity figures come from Ember and the Energy Institute.
+        meta:
+          url: https://github.com/owid/energy-data

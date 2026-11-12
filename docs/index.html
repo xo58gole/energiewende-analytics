@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energiewende Analytics</title>
+<meta name="description" content="Germany's electricity transition 2000-2025 compared with nine EU peers: a dbt + DuckDB + Power BI portfolio project by Zainab Sohail.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js"></script>
+<script src="data.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300;
+    --neutral-bar: #c3c2b7;
+    --up: #2a78d6; --down: #e34948;
+    --accent-wash: #e7f1fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
+      --neutral-bar: #4a4a46; --up: #3987e5; --down: #e66767; --accent-wash: #16263a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
+    --neutral-bar: #4a4a46; --up: #3987e5; --down: #e66767; --accent-wash: #16263a;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--ink);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding-block: 40px 64px;
+          padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  header .eyebrow { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.1; margin: 0 0 12px; letter-spacing: -0.02em; }
+  .lead { font-size: 19px; color: var(--ink-2); max-width: 760px; margin: 0 0 16px; }
+  .byline { font-size: 14px; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .byline a { color: var(--ink-2); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 16px; }
+  .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-2); background: var(--surface); }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 32px 0 8px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .kpi .label { font-size: 13px; color: var(--ink-2); }
+  .kpi .value { font-size: 34px; font-weight: 650; letter-spacing: -0.02em; margin: 4px 0 2px; }
+  .kpi .value small { font-size: 15px; font-weight: 500; color: var(--ink-2); margin-left: 2px; }
+  .kpi .compare { font-size: 13px; color: var(--muted); }
+
+  section { margin-top: 40px; }
+  h2 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .takeaway { color: var(--ink-2); margin: 0 0 14px; max-width: 760px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 12px 4px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid2 > div { min-width: 0; }
+  .chart { width: 100%; height: 420px; }
+  #c-mix { height: 460px; }
+  .chart.short { height: 360px; }
+
+  .pipeline { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; align-items: stretch; }
+  .step { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; position: relative; }
+  .step b { display: block; font-size: 14px; }
+  .step span { font-size: 13px; color: var(--ink-2); }
+  .step:not(:last-child)::after { content: "→"; position: absolute; right: -10px; top: 50%; transform: translate(50%, -50%); color: var(--muted); }
+
+  details { margin-top: 14px; }
+  summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--ink-2); font-weight: 600; }
+  tr.focus td { background: var(--accent-wash); font-weight: 600; }
+  .table-scroll { overflow-x: auto; }
+
+  footer { margin-top: 48px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--grid); padding-top: 16px; }
+  footer a { color: var(--ink-2); }
+
+  @media (max-width: 760px) {
+    .kpis { grid-template-columns: 1fr 1fr; }
+    .grid2 { grid-template-columns: 1fr; }
+    .pipeline { grid-template-columns: 1fr; }
+    .step:not(:last-child)::after { content: "↓"; right: 50%; top: auto; bottom: -14px; transform: translateX(50%); }
+    .chart { height: 360px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Portfolio project 01 · Data analytics</p>
+    <h1>Energiewende Analytics</h1>
+    <p class="lead" id="lead"></p>
+    <div class="byline">
+      <span>Zainab Sohail</span>
+      <a href="https://github.com/xo58gole/energiewende-analytics">Code on GitHub</a>
+      <a href="https://xo58gole.github.io/">Portfolio</a>
+    </div>
+    <div class="chips">
+      <span class="chip">Python</span><span class="chip">DuckDB</span><span class="chip">dbt</span>
+      <span class="chip">SQL</span><span class="chip">Star schema</span><span class="chip">Data tests</span>
+      <span class="chip">Power BI / DAX</span>
+    </div>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+
+  <section>
+    <h2>Germany's power mix, 2000–2025</h2>
+    <p class="takeaway" id="t-mix"></p>
+    <div class="card"><div id="c-mix" class="chart"></div></div>
+  </section>
+
+  <section class="grid2">
+    <div>
+      <h2>What replaced what</h2>
+      <p class="takeaway" id="t-change"></p>
+      <div class="card"><div id="c-change" class="chart short"></div></div>
+    </div>
+    <div>
+      <h2>Net electricity imports</h2>
+      <p class="takeaway" id="t-imports"></p>
+      <div class="card"><div id="c-imports" class="chart short"></div></div>
+    </div>
+  </section>
+
+  <section class="grid2">
+    <div>
+      <h2>Carbon intensity vs peers</h2>
+      <p class="takeaway" id="t-carbon"></p>
+      <div class="card"><div id="c-carbon" class="chart"></div></div>
+    </div>
+    <div>
+      <h2>Why France beats Germany</h2>
+      <p class="takeaway" id="t-scatter"></p>
+      <div class="card"><div id="c-scatter" class="chart"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The data table</h2>
+    <p class="takeaway">Every number on this page comes from the tested star schema. Latest year, cleanest first.</p>
+    <div class="card table-scroll"><table id="peer-table"></table></div>
+  </section>
+
+  <section>
+    <h2>How it's built</h2>
+    <p class="takeaway">A small, reproducible ELT pipeline. One command rebuilds everything, and 28 dbt tests guard the numbers.</p>
+    <div class="pipeline">
+      <div class="step"><b>Extract</b><span>Our World in Data energy CSV (Ember + Energy Institute), 23k rows</span></div>
+      <div class="step"><b>Load</b><span>Python loads it untouched into DuckDB's raw schema</span></div>
+      <div class="step"><b>Transform</b><span>dbt staging views: rename, filter, unpivot to long format</span></div>
+      <div class="step"><b>Model</b><span>Star schema: 3 dimensions, 2 facts, 28 data tests</span></div>
+      <div class="step"><b>Serve</b><span>Power BI report with DAX measures, and this page</span></div>
+    </div>
+  </section>
+
+  <footer>
+    Data: <a href="https://github.com/owid/energy-data">Our World in Data energy dataset</a>, based on Ember and the Energy Institute Statistical Review.
+    Shares are of total generation. Net imports above zero mean Germany bought more power than it sold.
+  </footer>
+</div>
+
+<script>
+(function () {
+  const D = window.DASHBOARD_DATA;
+  const k = D.kpis;
+  const fmt1 = v => v.toLocaleString("en-GB", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+  const fmt0 = v => Math.round(v).toLocaleString("en-GB");
+  const latest = D.latestYear, base = D.baseYear;
+  const de = D.peers.find(p => p.key === "DEU");
+  const fr = D.peers.find(p => p.key === "FRA");
+
+  // ---- words (computed from the data, so they never drift from the charts)
+  document.getElementById("lead").textContent =
+    `In ${latest} Germany made ${fmt0(k.deRenewable)}% of its electricity from renewables, well above the EU's ${fmt0(k.euRenewable)}%. ` +
+    `Yet its power is still the ${ordinal(k.peerCount - k.carbonRank + 1)} most carbon-intensive of ${k.peerCount} European countries compared, because it shut nuclear down before coal.`;
+
+  const ch = Object.fromEntries(D.change.map(c => [c.source, c.twh]));
+  document.getElementById("t-mix").textContent =
+    `Wind and solar grew from a sliver to the largest block. Nuclear fell to zero after the 2011 decision; coal is shrinking but still ~${fmt0(D.mix["Coal"].at(-1))} TWh.`;
+  document.getElementById("t-change").textContent =
+    `Since ${base}, wind (+${fmt0(ch["Wind"])} TWh) and solar (+${fmt0(ch["Solar"])} TWh) replaced most of the lost coal (${fmt0(ch["Coal"])}) and nuclear (${fmt0(ch["Nuclear"])}).`;
+  document.getElementById("t-imports").textContent =
+    `Germany was a net exporter for two decades. Since the last reactors closed in 2023 it buys more power than it sells.`;
+  document.getElementById("t-carbon").textContent =
+    `Germany emits ${fmt0(k.deCarbon)} g CO₂ per kWh, ${fmt0(k.deCarbon - k.euCarbon)} g more than the EU average. Only Poland is dirtier in this group.`;
+  document.getElementById("t-scatter").textContent =
+    `Carbon intensity follows low-carbon share (renewables + nuclear), not renewables alone. France has ${fmt0(fr.renewable)}% renewables but ${fmt0(fr.lowCarbon)}% low-carbon power.`;
+
+  // ---- KPI tiles
+  const tiles = [
+    { label: `Renewable share, ${latest}`, value: fmt1(k.deRenewable), unit: "%", compare: `EU-27: ${fmt1(k.euRenewable)}%` },
+    { label: `Carbon intensity, ${latest}`, value: fmt0(k.deCarbon), unit: "g/kWh", compare: `EU-27: ${fmt0(k.euCarbon)} g/kWh` },
+    { label: `Coal + nuclear lost since ${base}`, value: fmt0(-(ch["Coal"] + ch["Nuclear"])), unit: "TWh", compare: `Wind + solar gained ${fmt0(ch["Wind"] + ch["Solar"])} TWh` },
+    { label: `Net imports, ${latest}`, value: (k.deImports > 0 ? "+" : "") + fmt1(k.deImports), unit: "TWh", compare: `Net importer since 2023` },
+  ];
+  document.getElementById("kpis").innerHTML = tiles.map(t =>
+    `<div class="kpi"><div class="label">${t.label}</div><div class="value">${t.value}<small>${t.unit}</small></div><div class="compare">${t.compare}</div></div>`
+  ).join("");
+
+  // ---- table view
+  const rows = D.peers.map(p =>
+    `<tr class="${p.key === "DEU" ? "focus" : ""}"><td>${p.name}</td><td>${fmt0(p.carbon)}</td><td>${fmt1(p.renewable)}%</td><td>${fmt1(p.lowCarbon)}%</td></tr>`
+  ).join("");
+  document.getElementById("peer-table").innerHTML =
+    `<thead><tr><th>Country, ${latest}</th><th>Carbon intensity (g/kWh)</th><th>Renewable share</th><th>Low-carbon share</th></tr></thead><tbody>${rows}</tbody>`;
+
+  function ordinal(n) { return n === 1 ? "" : n === 2 ? "second" : n === 3 ? "third" : n === 9 ? "ninth" : n + "th"; }
+
+  // ---- charts
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  function baseLayout(extra) {
+    const font = { family: 'system-ui, -apple-system, "Segoe UI", sans-serif', size: 13, color: css("--ink-2") };
+    const axis = { gridcolor: css("--grid"), linecolor: css("--axis"), zerolinecolor: css("--axis"),
+                   tickfont: { color: css("--muted") }, title: { font: { color: css("--ink-2"), size: 12 } }, fixedrange: true };
+    return Object.assign({
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)", font,
+      margin: { l: 56, r: 24, t: 16, b: 48 },
+      hoverlabel: { bgcolor: css("--surface"), bordercolor: css("--border"), font: { color: css("--ink"), size: 13 } },
+      xaxis: Object.assign({}, axis), yaxis: Object.assign({}, axis),
+      showlegend: false,
+    }, extra || {});
+  }
+  const config = { displayModeBar: false, responsive: true };
+
+  function drawAll() {
+    const series = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6"].map(css);
+    const narrow = window.innerWidth < 600;
+
+    // 1. stacked area, direct-labelled at the right edge
+    const mixTraces = D.mixOrder.map((g, i) => ({
+      x: D.years, y: D.mix[g], name: g, type: "scatter", mode: "lines", stackgroup: "mix",
+      line: { width: 2, color: series[i] }, fillcolor: series[i] + "cc",
+      hovertemplate: `%{x}: <b>%{y:.0f} TWh</b> ${g}<extra></extra>`,
+    }));
+    let cum = 0;
+    const labels = D.mixOrder.map((g, i) => {
+      const v = D.mix[g].at(-1); const mid = cum + v / 2; cum += v;
+      return v < 8 ? null : { x: latest, y: mid, xanchor: "left", text: ` ${g}`, showarrow: false,
+               font: { size: 12, color: css("--ink-2") }, xshift: 4 };
+    }).filter(Boolean);
+    const msAnn = D.milestones.filter(m => [2011, 2022].includes(m.year)).map(m => ({
+      x: m.year, y: 1, yref: "paper", showarrow: false, yanchor: "bottom",
+      text: m.label,
+      font: { size: 11, color: css("--muted") }, xanchor: m.year === 2022 ? "right" : "left",
+    }));
+    const msLines = D.milestones.filter(m => [2011, 2022].includes(m.year)).map(m => ({
+      type: "line", x0: m.year, x1: m.year, y0: 0, y1: 1, yref: "paper",
+      line: { color: css("--muted"), width: 1, dash: "dot" },
+    }));
+    Plotly.react("c-mix", mixTraces, baseLayout({
+      margin: { l: 56, r: 110, t: 28, b: 80 }, hovermode: "x unified",
+      showlegend: true,
+      legend: { orientation: "h", x: 0, y: -0.12, xanchor: "left", yanchor: "top", traceorder: "normal",
+                font: { size: 12, color: css("--ink-2") } },
+      yaxis: Object.assign(baseLayout().yaxis, { title: { text: "Generation (TWh)" }, rangemode: "tozero" }),
+      xaxis: Object.assign(baseLayout().xaxis, { range: [D.years[0], latest] }),
+      annotations: narrow ? labels : labels.concat(msAnn), shapes: msLines,
+    }), config);
+
+    // 2. diverging bars, change by source
+    const chg = D.change;
+    Plotly.react("c-change", [{
+      type: "bar", orientation: "h", y: chg.map(c => c.source), x: chg.map(c => c.twh),
+      marker: { color: chg.map(c => c.twh >= 0 ? css("--up") : css("--down")) },
+      text: chg.map(c => (c.twh > 0 ? "+" : "") + Math.round(c.twh)),
+      // big bars carry their value inside (white), small ones just outside
+      textposition: chg.map(c => Math.abs(c.twh) > 60 ? "inside" : "outside"),
+      insidetextanchor: "middle",
+      textfont: { color: chg.map(c => Math.abs(c.twh) > 60 ? "#ffffff" : css("--ink-2")), size: 12 }, cliponaxis: false,
+      hovertemplate: `%{y}: <b>%{x:+.1f} TWh</b> (${base}→${latest})<extra></extra>`,
+    }], baseLayout({
+      margin: { l: narrow ? 112 : 130, r: 24, t: 8, b: 44 }, bargap: 0.35,
+      xaxis: Object.assign(baseLayout().xaxis, { title: { text: narrow ? "Change (TWh)" : `Change in generation, ${base}→${latest} (TWh)` }, zeroline: true,
+        range: [Math.min(...chg.map(c => c.twh)) * 1.3, Math.max(...chg.map(c => c.twh)) * 1.3] }),
+    }), config);
+
+    // 3. net imports, signed bars
+    const imp = D.trend.deImports;
+    Plotly.react("c-imports", [{
+      type: "bar", x: D.trend.years, y: imp,
+      marker: { color: imp.map(v => v >= 0 ? css("--down") : css("--up")) },
+      hovertemplate: "%{x}: <b>%{y:+.1f} TWh</b><extra></extra>",
+    }], baseLayout({
+      margin: { l: 56, r: 16, t: 8, b: 44 }, bargap: 0.25,
+      yaxis: Object.assign(baseLayout().yaxis, { title: { text: "Net imports (TWh)" }, zeroline: true }),
+      annotations: [
+        { x: 2004, y: -45, text: "Exporting", showarrow: false, font: { color: css("--muted"), size: 12 } },
+        { x: 2024, y: 34, text: "Importing", showarrow: false, font: { color: css("--muted"), size: 12 } },
+      ],
+    }), config);
+
+    // 4. carbon intensity, Germany highlighted
+    const peers = [...D.peers].reverse();
+    Plotly.react("c-carbon", [{
+      type: "bar", orientation: "h", y: peers.map(p => p.name), x: peers.map(p => p.carbon),
+      marker: { color: peers.map(p => p.key === "DEU" ? css("--s1") : p.key === "EU27" ? css("--ink-2") : css("--neutral-bar")) },
+      text: peers.map(p => fmt0(p.carbon)), textposition: "outside", cliponaxis: false,
+      textfont: { color: css("--ink-2"), size: 12 },
+      hovertemplate: "%{y}: <b>%{x:.0f} g CO₂/kWh</b><extra></extra>",
+    }], baseLayout({
+      margin: { l: 140, r: 44, t: 8, b: 44 }, bargap: 0.3,
+      xaxis: Object.assign(baseLayout().xaxis, { title: { text: narrow ? "g CO₂ per kWh" : `Carbon intensity, ${latest} (g CO₂ per kWh)` } }),
+    }), config);
+
+    // 5. low-carbon share vs carbon intensity
+    const pts = D.peers;
+    Plotly.react("c-scatter", [{
+      type: "scatter", mode: "markers+text", x: pts.map(p => p.lowCarbon), y: pts.map(p => p.carbon),
+      text: pts.map(p => p.key === "EU27" ? "EU-27" : p.name),
+      textposition: pts.map(p => ({ SWE: "bottom center", AUT: "bottom center", NLD: "bottom center",
+                                    BEL: "bottom left", ESP: "top right" })[p.key] || "top center"),
+      textfont: { size: 12, color: css("--ink-2") },
+      marker: { size: pts.map(p => p.key === "DEU" ? 14 : 10),
+                color: pts.map(p => p.key === "DEU" ? css("--s1") : css("--neutral-bar")),
+                line: { width: 2, color: css("--surface") } },
+      hovertemplate: pts.map(p => `<b>${p.name}</b><br>Low-carbon share: ${fmt1(p.lowCarbon)}%<br>Renewables only: ${fmt1(p.renewable)}%<br>Carbon intensity: ${fmt0(p.carbon)} g/kWh<extra></extra>`),
+      cliponaxis: false,
+    }], baseLayout({
+      margin: { l: 60, r: 24, t: 16, b: 48 },
+      xaxis: Object.assign(baseLayout().xaxis, { title: { text: "Low-carbon share of generation (%)" }, range: [20, 105] }),
+      yaxis: Object.assign(baseLayout().yaxis, { title: { text: "Carbon intensity (g/kWh)" }, range: [-20, 660] }),
+    }), config);
+  }
+
+  drawAll();
+  // redraw when the reader's theme changes
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawAll);
+  let resizeTimer; window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(drawAll, 200); });
+  new MutationObserver(drawAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+})();
+</script>
+</body>
+</html>

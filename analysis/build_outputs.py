@@ -1,0 +1,163 @@
+"""Turn the dbt marts into the two things people actually look at:
+
+1. exports/*.csv  - the star schema as flat files for Power BI
+2. docs/data.js   - the numbers behind the web dashboard (docs/index.html)
+
+It also prints the headline findings so you can sanity-check them.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import duckdb
+
+ROOT = Path(__file__).resolve().parents[1]
+DB = ROOT / "data" / "energiewende.duckdb"
+EXPORTS = ROOT / "exports"
+DOCS = ROOT / "docs"
+
+MART_TABLES = ["dim_country", "dim_year", "dim_energy_source", "fact_generation", "fact_country_year"]
+
+# Six groups keep the stacked chart readable (nine sources is too many colours).
+MIX_GROUPS = {
+    "coal": "Coal",
+    "gas": "Gas & oil",
+    "oil": "Gas & oil",
+    "nuclear": "Nuclear",
+    "wind": "Wind",
+    "solar": "Solar",
+    "hydro": "Hydro & bio",
+    "bioenergy": "Hydro & bio",
+    "other_renewable": "Hydro & bio",
+}
+MIX_ORDER = ["Coal", "Gas & oil", "Nuclear", "Wind", "Solar", "Hydro & bio"]
+
+
+def export_csvs(con: duckdb.DuckDBPyConnection) -> None:
+    EXPORTS.mkdir(exist_ok=True)
+    for table in MART_TABLES:
+        out = EXPORTS / f"{table}.csv"
+        con.execute(f"copy marts.{table} to '{out.as_posix()}' (header, delimiter ',')")
+        print(f"  exported {out.relative_to(ROOT)}")
+
+
+def dashboard_data(con: duckdb.DuckDBPyConnection) -> dict:
+    latest = con.execute("select max(year) from marts.dim_year").fetchone()[0]
+    base = 2010
+
+    # Germany's mix over time, grouped
+    rows = con.execute(
+        "select year, source_key, generation_twh from marts.fact_generation "
+        "where country_key = 'DEU' order by year"
+    ).fetchall()
+    years = sorted({r[0] for r in rows})
+    mix = {g: [0.0] * len(years) for g in MIX_ORDER}
+    for year, source, twh in rows:
+        mix[MIX_GROUPS[source]][years.index(year)] += twh
+    mix = {g: [round(v, 1) for v in vals] for g, vals in mix.items()}
+
+    # What changed between the base year and the latest year, by source
+    change = con.execute(
+        f"""
+        select s.source_name,
+               sum(case when f.year = {latest} then f.generation_twh else 0 end)
+             - sum(case when f.year = {base} then f.generation_twh else 0 end) as delta
+        from marts.fact_generation f
+        join marts.dim_energy_source s using (source_key)
+        where f.country_key = 'DEU' and f.year in ({base}, {latest})
+        group by s.source_name, s.sort_order
+        having abs(delta) >= 1
+        order by delta
+        """
+    ).fetchall()
+
+    # Peers in the latest year
+    peers = con.execute(
+        f"""
+        select c.country_name, c.country_key, f.carbon_intensity_g_per_kwh,
+               f.renewable_share_pct, f.low_carbon_share_pct
+        from marts.fact_country_year f
+        join marts.dim_country c using (country_key)
+        where f.year = {latest}
+        order by f.carbon_intensity_g_per_kwh
+        """
+    ).fetchall()
+
+    # Germany and EU over time
+    trend = con.execute(
+        """
+        select year, country_key, renewable_share_pct, carbon_intensity_g_per_kwh, net_imports_twh
+        from marts.fact_country_year
+        where country_key in ('DEU', 'EU27')
+        order by year
+        """
+    ).fetchall()
+    de = [r for r in trend if r[1] == "DEU"]
+    eu = [r for r in trend if r[1] == "EU27"]
+
+    milestones = con.execute(
+        "select year, milestone from marts.dim_year where milestone is not null order by year"
+    ).fetchall()
+
+    peer_by_key = {p[1]: p for p in peers}
+    return {
+        "latestYear": latest,
+        "baseYear": base,
+        "years": years,
+        "mixOrder": MIX_ORDER,
+        "mix": mix,
+        "change": [{"source": s, "twh": round(d, 1)} for s, d in change],
+        "peers": [
+            {"name": n, "key": k, "carbon": ci, "renewable": ren, "lowCarbon": lc}
+            for n, k, ci, ren, lc in peers
+        ],
+        "trend": {
+            "years": [r[0] for r in de],
+            "deRenewable": [r[2] for r in de],
+            "euRenewable": [r[2] for r in eu],
+            "deCarbon": [r[3] for r in de],
+            "euCarbon": [r[3] for r in eu],
+            "deImports": [r[4] for r in de],
+        },
+        "milestones": [{"year": y, "label": m} for y, m in milestones],
+        "kpis": {
+            "deRenewable": peer_by_key["DEU"][3],
+            "euRenewable": peer_by_key["EU27"][3],
+            "deCarbon": peer_by_key["DEU"][2],
+            "euCarbon": peer_by_key["EU27"][2],
+            "deImports": de[-1][4],
+            "carbonRank": [p[1] for p in peers if p[1] != "EU27"].index("DEU") + 1,
+            "peerCount": len([p for p in peers if p[1] != "EU27"]),
+        },
+    }
+
+
+def main() -> None:
+    con = duckdb.connect(str(DB), read_only=True)
+    print("Exporting star schema for Power BI:")
+    export_csvs(con)
+
+    data = dashboard_data(con)
+    DOCS.mkdir(exist_ok=True)
+    (DOCS / "data.js").write_text(
+        "// Generated by analysis/build_outputs.py - don't edit by hand.\n"
+        f"window.DASHBOARD_DATA = {json.dumps(data, indent=1)};\n",
+        encoding="utf-8",
+    )
+    print("  wrote docs/data.js")
+
+    k = data["kpis"]
+    print(f"\nHeadline findings ({data['latestYear']}):")
+    print(f"  Renewable share  DE {k['deRenewable']:.1f}%  vs EU {k['euRenewable']:.1f}%")
+    print(f"  Carbon intensity DE {k['deCarbon']:.0f} g/kWh vs EU {k['euCarbon']:.0f} g/kWh"
+          f"  (rank {k['carbonRank']} of {k['peerCount']}, 1 = cleanest)")
+    print(f"  Net imports      DE {k['deImports']:+.1f} TWh")
+    for c in data["change"]:
+        print(f"  {data['baseYear']}->{data['latestYear']} {c['source']:<20} {c['twh']:+7.1f} TWh")
+    con.close()
+
+
+if __name__ == "__main__":
+    main()
